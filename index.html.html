@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MacroSims: Interactive Macroeconomic Simulator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root{
+    --ink:#1b2430; --paper:#f6f4ee; --panel:#ffffff; --line:#d8d3c4;
+    --ad:#2f5d8a; --sras:#b5502f; --lras:#3f7a5c; --amber:#c68a2e;
+  }
+  body{background:var(--paper); color:var(--ink); font-family:'Iowan Old Style','Georgia',serif; transition: background-color .8s ease, color .8s ease;}
+  .sans{font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;}
+  .tab-btn{border-bottom:2px solid transparent;}
+  .tab-btn.active{border-bottom:2px solid var(--ink); font-weight:600;}
+  input[type=range]{-webkit-appearance:none; height:4px; background:var(--line); border-radius:2px;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--ink); cursor:pointer; margin-top:-5.5px;}
+  input[type=range]::-moz-range-thumb{width:15px; height:15px; border-radius:50%; background:var(--ink); cursor:pointer; border:none;}
+  .card{background:var(--panel); border:1px solid var(--line); transition: background-color .8s ease, border-color .8s ease;}
+  header{transition: border-color .8s ease;}
+  ::selection{background:#ead9b8;}
+
+  body[data-mood="recession"]{ --paper:#eef0f2; --panel:#f7f8f9; --ink:#2b3542; --line:#c3cbd4; --amber:#5b6b7a; }
+  body[data-mood="overheat"]{ --paper:#fbf0ea; --panel:#fffaf6; --ink:#5c2a15; --line:#e8c3ae; --amber:#c9622e; }
+  body[data-mood="deflation"]{ --paper:#eef2f7; --panel:#f8fafc; --ink:#1d3350; --line:#c2d3e6; --amber:#3e6fa3; }
+  body[data-mood="boom"]{ --paper:#f4f7ea; --panel:#fbfdf5; --ink:#2c3e1f; --line:#cfe0ad; --amber:#6f9a37; }
+  body[data-mood="stable"]{ --paper:#f6f4ee; --panel:#ffffff; --ink:#1b2430; --line:#d8d3c4; --amber:#c68a2e; }
+
+  #moodEmoji{display:inline-block; font-size:3rem; line-height:1;}
+  @keyframes moodCry{
+    0%,100%{transform:translateY(0) rotate(0deg);}
+    20%{transform:translateY(2px) rotate(-4deg);}
+    40%{transform:translateY(0) rotate(3deg);}
+    60%{transform:translateY(2px) rotate(-3deg);}
+    80%{transform:translateY(0) rotate(2deg);}
+  }
+  @keyframes moodBounce{
+    0%,100%{transform:translateY(0);}
+    50%{transform:translateY(-10px);}
+  }
+  @keyframes moodPulse{
+    0%,100%{transform:scale(1);}
+    50%{transform:scale(1.12);}
+  }
+  @keyframes moodShake{
+    0%,100%{transform:translateX(0) rotate(0deg);}
+    25%{transform:translateX(-3px) rotate(-3deg);}
+    75%{transform:translateX(3px) rotate(3deg);}
+  }
+  .mood-recession{animation:moodCry 1.4s ease-in-out infinite;}
+  .mood-boom{animation:moodBounce 0.9s ease-in-out infinite;}
+  .mood-overheat{animation:moodShake 0.5s ease-in-out infinite;}
+  .mood-deflation{animation:moodShake 0.9s ease-in-out infinite;}
+  .mood-stable{animation:moodPulse 2.4s ease-in-out infinite;}
+</style>
+</head>
+<body class="min-h-screen">
+
+<header class="border-b" style="border-color:var(--line)">
+  <div class="max-w-7xl mx-auto px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl" style="font-weight:700">MacroSims</h1>
+      <p class="sans text-xs text-neutral-500 tracking-wide">Interactive Macroeconomic Simulator — AD / SRAS / LRAS</p>
+    </div>
+    <div class="flex items-center gap-4 sans text-sm">
+      <nav class="flex gap-5" id="topicTabs">
+        <button data-tab="monetary" class="tab-btn active pb-1">Monetary &amp; Fiscal</button>
+        <button data-tab="supply" class="tab-btn pb-1">Supply Side</button>
+        <button data-tab="growth" class="tab-btn pb-1">Long-Run Growth</button>
+      </nav>
+      <button id="resetBtn" class="border px-3 py-1.5 rounded sans" style="border-color:var(--ink)">Reset</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-5 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+  <!-- CONTROL PANEL -->
+  <section class="lg:col-span-4 space-y-4">
+
+    <div class="card rounded p-4 sans">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-3">Scenario presets</p>
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <button class="preset border rounded px-2 py-2 text-left" data-preset="demandPull" style="border-color:var(--line)">Demand-Pull Inflation</button>
+        <button class="preset border rounded px-2 py-2 text-left" data-preset="stagflation" style="border-color:var(--line)">Cost-Push / Stagflation</button>
+        <button class="preset border rounded px-2 py-2 text-left" data-preset="recession" style="border-color:var(--line)">Recessionary Shock</button>
+        <button class="preset border rounded px-2 py-2 text-left" data-preset="growth" style="border-color:var(--line)">Long-Run Growth</button>
+      </div>
+    </div>
+
+    <div id="panel-monetary" class="panel card rounded p-4 sans space-y-4">
+      <p class="text-xs uppercase tracking-wide text-neutral-500">Aggregate demand shifters</p>
+      <div>
+        <div class="flex justify-between text-sm"><label>Interest rate</label><span id="v-rate">0.0</span></div>
+        <input type="range" id="rate" min="-10" max="10" step="0.5" value="0" class="w-full">
+        <p class="text-xs text-neutral-500">Tighter (right) → less investment; looser (left) → more investment</p>
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Govt. spending (G)</label><span id="v-govt">0.0</span></div>
+        <input type="range" id="govt" min="-10" max="10" step="0.5" value="0" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Taxes (T)</label><span id="v-tax">0.0</span></div>
+        <input type="range" id="tax" min="-10" max="10" step="0.5" value="0" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Consumer confidence</label><span id="v-conf">0.0</span></div>
+        <input type="range" id="conf" min="-10" max="10" step="0.5" value="0" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Net exports</label><span id="v-nx">0.0</span></div>
+        <input type="range" id="nx" min="-10" max="10" step="0.5" value="0" class="w-full">
+      </div>
+    </div>
+
+    <div id="panel-supply" class="panel card rounded p-4 sans space-y-4 hidden">
+      <p class="text-xs uppercase tracking-wide text-neutral-500">Short-run supply shifters</p>
+      <div>
+        <div class="flex justify-between text-sm"><label>Input / energy costs</label><span id="v-cost">0.0</span></div>
+        <input type="range" id="cost" min="-10" max="10" step="0.5" value="0" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Supply shock</label><span id="v-shock">0.0</span></div>
+        <input type="range" id="shock" min="-10" max="10" step="0.5" value="0" class="w-full">
+        <p class="text-xs text-neutral-500">Negative = favorable shock, positive = adverse shock</p>
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Wage rigidity</label><span id="v-rigid">2.0</span></div>
+        <input type="range" id="rigid" min="0" max="10" step="0.5" value="2" class="w-full">
+        <p class="text-xs text-neutral-500">Higher rigidity flattens the SRAS curve</p>
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Productivity</label><span id="v-prod">0.0</span></div>
+        <input type="range" id="prod" min="-10" max="10" step="0.5" value="0" class="w-full">
+      </div>
+    </div>
+
+    <div id="panel-growth" class="panel card rounded p-4 sans space-y-4 hidden">
+      <p class="text-xs uppercase tracking-wide text-neutral-500">Long-run supply shifters</p>
+      <div>
+        <div class="flex justify-between text-sm"><label>Technology</label><span id="v-tech">0.0</span></div>
+        <input type="range" id="tech" min="0" max="10" step="0.5" value="0" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Capital stock</label><span id="v-cap">0.0</span></div>
+        <input type="range" id="cap" min="0" max="10" step="0.5" value="0" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-sm"><label>Labor force capacity</label><span id="v-lab">0.0</span></div>
+        <input type="range" id="lab" min="0" max="10" step="0.5" value="0" class="w-full">
+      </div>
+    </div>
+
+  </section>
+
+  <!-- VISUALIZATION + DASHBOARD -->
+  <section class="lg:col-span-8 space-y-4">
+
+    <div class="card rounded p-4">
+      <canvas id="adasChart" height="320"></canvas>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 sans items-stretch">
+      <div class="card rounded p-3 flex flex-col items-center justify-center text-center">
+        <span id="moodEmoji" class="mood-stable">🙂</span>
+        <p id="moodLabel" class="text-xs text-neutral-500 mt-1">Stable</p>
+      </div>
+      <div class="card rounded p-3">
+        <p class="text-xs text-neutral-500">Price level (P)</p>
+        <p id="out-P" class="text-2xl" style="font-weight:700">100.0</p>
+      </div>
+      <div class="card rounded p-3">
+        <p class="text-xs text-neutral-500">Real GDP (Y)</p>
+        <p id="out-Y" class="text-2xl" style="font-weight:700">100.0</p>
+      </div>
+      <div class="card rounded p-3">
+        <p class="text-xs text-neutral-500">Unemployment (U%)</p>
+        <p id="out-U" class="text-2xl" style="font-weight:700">5.0%</p>
+      </div>
+      <div class="card rounded p-3">
+        <p class="text-xs text-neutral-500">Inflation (π%)</p>
+        <p id="out-Pi" class="text-2xl" style="font-weight:700">0.0%</p>
+      </div>
+    </div>
+
+    <div class="card rounded p-4 sans">
+      <p class="text-xs uppercase tracking-wide text-neutral-500 mb-2">Equilibrium insight</p>
+      <p id="insight" class="text-sm leading-relaxed">Loading…</p>
+    </div>
+
+  </section>
+</main>
+
+<footer class="max-w-7xl mx-auto px-5 pb-8 sans text-xs text-neutral-500">
+  Educational simulation. Model is a simplified linear AD–SRAS–LRAS framework with an Okun's Law approximation; not a calibrated forecasting tool.
+</footer>
+
+<script>
+const DEFAULTS = {
+  rate:0, govt:0, tax:0, conf:0, nx:0,
+  cost:0, shock:0, rigid:2, prod:0,
+  tech:0, cap:0, lab:0
+};
+let s = {...DEFAULTS};
+
+const sliderIds = Object.keys(DEFAULTS);
+sliderIds.forEach(id=>{
+  document.getElementById(id).addEventListener('input', e=>{
+    s[id] = parseFloat(e.target.value);
+    syncLabels(); compute();
+  });
+});
+
+function syncLabels(){
+  const map = {rate:'v-rate', govt:'v-govt', tax:'v-tax', conf:'v-conf', nx:'v-nx',
+    cost:'v-cost', shock:'v-shock', rigid:'v-rigid', prod:'v-prod',
+    tech:'v-tech', cap:'v-cap', lab:'v-lab'};
+  sliderIds.forEach(id=> document.getElementById(map[id]).textContent = s[id].toFixed(1));
+}
+
+// Tabs
+document.getElementById('topicTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab-btn'); if(!btn) return;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));
+  document.getElementById('panel-'+btn.dataset.tab).classList.remove('hidden');
+});
+
+// Reset
+document.getElementById('resetBtn').addEventListener('click', ()=>applyState(DEFAULTS));
+
+// Presets
+const PRESETS = {
+  demandPull:{rate:-6, govt:6, tax:-3, conf:5, nx:2, cost:0, shock:0, rigid:2, prod:0, tech:0, cap:0, lab:0},
+  stagflation:{rate:0, govt:0, tax:0, conf:-1, nx:0, cost:7, shock:7, rigid:6, prod:-3, tech:0, cap:0, lab:0},
+  recession:{rate:5, govt:-2, tax:2, conf:-8, nx:-3, cost:0, shock:0, rigid:2, prod:0, tech:0, cap:0, lab:0},
+  growth:{rate:0, govt:0, tax:0, conf:0, nx:0, cost:0, shock:0, rigid:2, prod:4, tech:8, cap:7, lab:5}
+};
+document.querySelectorAll('.preset').forEach(btn=>{
+  btn.addEventListener('click', ()=> applyState(PRESETS[btn.dataset.preset]));
+});
+
+function applyState(state){
+  s = {...state};
+  sliderIds.forEach(id=> document.getElementById(id).value = s[id]);
+  syncLabels(); compute();
+}
+
+// --- Economic model ---
+const A0 = 180, aSlope = 0.6;   // AD: P = A - aSlope*Y
+const S0 = 20, sSlopeBase = 0.9; // SRAS: P = S + sSlope*(Y - Yn)
+const Yn0 = 100; // baseline potential output
+const Un = 5, alpha = 0.35; // Okun's law
+
+function model(){
+  const A = A0 + (-2*s.rate) + s.govt + (-0.6*s.tax) + s.conf + s.nx;
+  const S = S0 + s.cost + s.shock - s.prod;
+  const sSlope = Math.max(0.15, sSlopeBase * (1 - s.rigid/14));
+  const Ystar = Yn0 + s.tech*3 + s.cap*2 + s.lab*2;
+
+  const Y = (A - S + sSlope*Ystar) / (aSlope + sSlope);
+  const P = A - aSlope*Y;
+  const U = Math.max(0, Un - alpha*(Y - Ystar));
+  const pi = P - 100; // % deviation from baseline price index
+
+  return {A, S, sSlope, Ystar, Y, P, U, pi};
+}
+
+let chart;
+function buildChart(){
+  const ctx = document.getElementById('adasChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type:'line',
+    data:{ datasets:[
+      {label:'AD', borderColor:getVar('--ad'), backgroundColor:'transparent', data:[], borderWidth:2.5, pointRadius:0, tension:0},
+      {label:'SRAS', borderColor:getVar('--sras'), backgroundColor:'transparent', data:[], borderWidth:2.5, pointRadius:0, tension:0},
+      {label:'LRAS', borderColor:getVar('--lras'), backgroundColor:'transparent', data:[], borderWidth:2, borderDash:[6,4], pointRadius:0, tension:0},
+      {label:'Equilibrium', borderColor:getVar('--amber'), backgroundColor:getVar('--amber'), data:[], showLine:false, pointRadius:6, pointStyle:'circle'}
+    ]},
+    options:{
+      responsive:true, animation:{duration:400},
+      scales:{
+        x:{type:'linear', title:{display:true, text:'Real GDP / Output (Y)'}, min:40, max:200},
+        y:{title:{display:true, text:'Price Level (P)'}, min:40, max:220}
+      },
+      plugins:{legend:{position:'top'}}
+    }
+  });
+}
+function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function compute(){
+  const m = model();
+
+  document.getElementById('out-P').textContent = m.P.toFixed(1);
+  document.getElementById('out-Y').textContent = m.Y.toFixed(1);
+  document.getElementById('out-U').textContent = m.U.toFixed(1)+'%';
+  document.getElementById('out-Pi').textContent = (m.pi>=0?'+':'')+m.pi.toFixed(1)+'%';
+
+  const xs = [];
+  for(let y=40; y<=200; y+=4) xs.push(y);
+  const adData = xs.map(y=>({x:y, y: m.A - aSlope*y}));
+  const srasData = xs.map(y=>({x:y, y: m.S + m.sSlope*(y-m.Ystar)}));
+  const lrasData = [{x:m.Ystar, y:40},{x:m.Ystar, y:220}];
+
+  chart.data.datasets[0].data = adData;
+  chart.data.datasets[1].data = srasData;
+  chart.data.datasets[2].data = lrasData;
+  chart.data.datasets[3].data = [{x:m.Y, y:m.P}];
+  chart.update('none');
+
+  document.getElementById('insight').textContent = buildInsight(m);
+  updateMood(m);
+}
+
+function updateMood(m){
+  const gap = m.Y - m.Ystar;
+  const el = document.getElementById('moodEmoji');
+  const label = document.getElementById('moodLabel');
+  let emoji, cls, text;
+
+  if(gap < -2.5){
+    emoji='😢'; cls='mood-recession'; text='Recession';
+  } else if(m.pi > 4 && gap > 1){
+    emoji='🥵'; cls='mood-overheat'; text='Overheating';
+  } else if(m.pi < -3){
+    emoji='😰'; cls='mood-deflation'; text='Deflation';
+  } else if(gap > 2.5){
+    emoji='😄'; cls='mood-boom'; text='Booming';
+  } else {
+    emoji='🙂'; cls='mood-stable'; text='Stable';
+  }
+
+  el.textContent = emoji;
+  el.className = cls;
+  label.textContent = text;
+  document.body.dataset.mood = cls.replace('mood-','');
+}
+
+function buildInsight(m){
+  const gap = m.Y - m.Ystar;
+  let gapText;
+  if(Math.abs(gap) < 1.5) gapText = "output sits essentially at potential — the economy is near full employment with no significant output gap.";
+  else if(gap > 0) gapText = `an inflationary gap of about ${gap.toFixed(1)} units — output exceeds potential GDP (Y* = ${m.Ystar.toFixed(1)}), which tends to push prices upward over time as the economy self-corrects toward LRAS.`;
+  else gapText = `a recessionary gap of about ${Math.abs(gap).toFixed(1)} units — output falls short of potential GDP (Y* = ${m.Ystar.toFixed(1)}), consistent with elevated unemployment.`;
+
+  let priceText;
+  if(m.pi > 2) priceText = "The price level has risen well above baseline, signaling meaningful inflationary pressure.";
+  else if(m.pi < -2) priceText = "The price level has fallen below baseline, signaling disinflation or deflationary pressure.";
+  else priceText = "The price level is close to baseline.";
+
+  return `Equilibrium output is ${m.Y.toFixed(1)} at a price level of ${m.P.toFixed(1)}, implying ${gapText} ${priceText} Unemployment stands at ${m.U.toFixed(1)}%, derived from the output gap via an Okun's-Law approximation. Policy trade-off: shifting AD to close a recessionary gap risks pushing prices higher, while closing an inflationary gap by cooling AD risks raising unemployment — the classic short-run trade-off illustrated by movement along SRAS.`;
+}
+
+buildChart();
+syncLabels();
+compute();
+</script>
+</body>
+</html>
